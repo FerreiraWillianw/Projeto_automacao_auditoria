@@ -1,19 +1,23 @@
 import streamlit as st
 import os
-import time
 from sqlalchemy import create_engine, text
 
-# Conexão com o banco de dados
+# --- CONFIGURAÇÃO E CONEXÃO ---
+# A URL deve estar configurada no seu arquivo .streamlit/secrets.toml
 db_url = st.secrets["connections"]["url"]
 engine = create_engine(db_url)
 
-# --- CONFIGURAÇÃO DE CAMINHOS ---
+# --- LOCALIZAÇÃO DE ATIVOS (LOGOS) ---
 caminho_script = os.path.dirname(os.path.abspath(__file__))
-arquivo_excel = os.path.join(caminho_script, "AUDITORIA DE DIAGNÓSTICO FUSVE.xlsx")
-logo_fusve = os.path.join(caminho_script, "logo_fusve.png")
-logo_auditoria = os.path.join(caminho_script, "logo_auditoria.png")
+logo_fusve = os.path.join(caminho_script, "assets", "logo_fusve.png")
+logo_auditoria = os.path.join(caminho_script, "assets", "logo_auditoria.png")
 
-# --- TABELA DE RISCO ---
+MAPPING_AREAS = {
+    "Gerência de Gente e gestão - GGG": 1,
+    "Gerência de Finanças": 2,
+    "Gerência de TI": 3,
+}
+
 MAPA_RISCO = {
     ("Muito Alto", "Muito Alto"): 15, ("Alto", "Muito Alto"): 14, ("Médio", "Muito Alto"): 13, ("Baixo", "Muito Alto"): 12,
     ("Muito Alto", "Alto"): 11, ("Alto", "Alto"): 10, ("Médio", "Alto"): 9, ("Baixo", "Alto"): 8,
@@ -21,38 +25,44 @@ MAPA_RISCO = {
     ("Muito Alto", "Baixo"): 3, ("Alto", "Baixo"): 2, ("Médio", "Baixo"): 1, ("Baixo", "Baixo"): 0
 }
 
-# --- LÓGICA DE LIMPEZA (DEVE FICAR NO TOPO) ---
+# --- LÓGICA DE LIMPEZA ---
 if 'deve_limpar' in st.session_state and st.session_state['deve_limpar']:
     campos_para_limpar = ["input_processo", "input_objetivo", "input_executor", 
-                          "input_descricao", "input_etapa_ini", "input_etapa_fim", "input_produto"]
+                          "input_descricao", "input_etapa_ini", "input_etapa_fim", 
+                          "input_produto", "codigo_processo"]
     for campo in campos_para_limpar:
         if campo in st.session_state: del st.session_state[campo]
     st.session_state['riscos'] = []
     st.session_state['deve_limpar'] = False
     st.rerun()
 
-# --- FUNÇÕES AUXILIARES ---
+# --- FUNÇÕES ---
+def obter_proximo_codigo(area_selecionada):
+    prefixo = MAPPING_AREAS.get(area_selecionada, "0")
+    query = text("SELECT COUNT(*) FROM processos WHERE area = :area")
+    with engine.connect() as conn:
+        resultado = conn.execute(query, {"area": area_selecionada})
+        contagem = resultado.scalar() or 0
+    return f"{prefixo}.{contagem + 1}"
+
 def get_estilo_risco(score):
     if score >= 12: return "#FF4B4B", "🔴" 
     elif score >= 8: return "#FF9900", "🟠"    
     elif score >= 4: return "#FFD700", "🟡"   
-    elif score >= 0: return "#00CC96", "🟢"   
+    elif score >= 0: return "#00CC96", "🟢" 
 
 def salvar_no_banco():
     try: 
-        with engine.begin() as conn: # 'begin' inicia a transação automaticamente
-            
-            # 1. Salva o Processo e recupera o ID criado.
+        with engine.begin() as conn:
+            # 1. Salva Processo
             sql_processo = text("""
                 INSERT INTO processos (area, codigo_processo, nome_processo, objetivo, executor, descricao, etapa_ini, etapa_fim, produto)
                 VALUES (:area, :cod, :nome, :obj, :exec, :desc, :e_ini, :e_fim, :prod)
                 RETURNING id
             """)
-
-            # Executa e pega o ID do processo recém-criado
             resultado = conn.execute(sql_processo, {
                 "area": st.session_state.get("area"),
-                "cod": "1.1",
+                "cod": st.session_state.get("codigo_processo"),
                 "nome": st.session_state.get("input_processo"),
                 "obj": st.session_state.get("input_objetivo"),
                 "exec": st.session_state.get("input_executor"),
@@ -61,14 +71,13 @@ def salvar_no_banco():
                 "e_fim": st.session_state.get("input_etapa_fim"),
                 "prod": st.session_state.get("input_produto")
             })
-            processo_id = resultado.scalar()  # Pega o ID retornado
+            processo_id = resultado.scalar()
 
-            # 2. Salva cada Risco vinculado ao ID do processo
+            # 2. Salva Riscos
             sql_risco = text("""
                 INSERT INTO riscos (processo_id, nome_risco, fator_risco, melhoria, impacto, probabilidade, apetite_risco, motivo_risco)
                 VALUES (:pid, :nome, :fator, :melhoria, :imp, :prob, :apetite, :motivo)
             """)
-
             for i in range(len(st.session_state['riscos'])):
                 conn.execute(sql_risco, {
                     "pid": processo_id,
@@ -80,21 +89,15 @@ def salvar_no_banco():
                     "apetite": st.session_state.get(f"apetite_{i}"),
                     "motivo": st.session_state.get(f"motivo_{i}")
                 })
-
         return True
     except Exception as e:
         st.error(f"Erro ao salvar no banco: {e}")
         return False
-   
-# --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Diagnóstico de Processos", layout="centered")
 
-# Sidebar com logo verificada
+# --- UI ---
+st.set_page_config(page_title="Diagnóstico FUSVE", layout="centered")
+
 if os.path.exists(logo_fusve): st.sidebar.image(logo_fusve, width=200)
-
-st.markdown("<style>.stApp { background-color: #ffffff; }</style>", unsafe_allow_html=True)
-
-# Centro com logo verificada
 if os.path.exists(logo_auditoria):
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2: st.image(logo_auditoria, width=300)
@@ -104,30 +107,31 @@ st.title("Diagnóstico de Processos - Auditoria Interna FUSVE")
 if 'riscos' not in st.session_state: st.session_state['riscos'] = []
 if 'errors' not in st.session_state: st.session_state['errors'] = {}
 
-def mostrar_erro(key):
-    if key in st.session_state['errors']: st.error(st.session_state['errors'][key])
+# 1. Dados do Processo ---------------------------------------
 
-# --- FORMULÁRIO ---
 st.subheader("1. Dados do Processo")
-area = st.selectbox("Área", ["Gerência de Gente e gestão - GGG", "Gerência de Finanças", "Gerência de Operações", "Gerência de Tecnologia", "Gerência de Marketing"], key="area")
-st.text_area("Processo:", key="input_processo")
-mostrar_erro("input_processo")
+area = st.selectbox("Selecione a Área:", list(MAPPING_AREAS.keys()), key="area")
+if area:
+    sugestao_id = obter_proximo_codigo(area)
+    st.text_input("Código do Processo:", value=sugestao_id, key="codigo_processo")
+
+st.text_input("Nome do Processo:", key="input_processo")
 st.text_area("Objetivo:", key="input_objetivo")
-mostrar_erro("input_objetivo")
 st.text_area("Quem Executa?", key="input_executor")
-mostrar_erro("input_executor")
 st.text_area("Descrição:", key="input_descricao")
-mostrar_erro("input_descricao")
 st.text_area("Etapa Inicial:", key="input_etapa_ini")
-mostrar_erro("input_etapa_ini")
 st.text_area("Etapa Final:", key="input_etapa_fim")
-mostrar_erro("input_etapa_fim")
 st.text_area("Produto:", key="input_produto")
-mostrar_erro("input_produto")
 
 st.divider()
 
+# 2. Riscos Associados ---------------------------------------
+
 st.subheader("2. Riscos Associados")
+if st.button("➕ Adicionar Novo Risco"):
+    st.session_state['riscos'].append({})
+    st.rerun()
+
 for i, _ in enumerate(st.session_state['riscos']):
     st.markdown(f"**Risco {i+1}**")
     st.text_input(f"Nome do Risco:", key=f"nome_{i}")
@@ -144,31 +148,20 @@ for i, _ in enumerate(st.session_state['riscos']):
     
     st.markdown(f"""
         <div style="background-color: {cor}; padding: 10px; border-radius: 5px; text-align: center;">
-            <h3 style="color: white; margin: 0;">{emoji} {risco_calc}</h3>
+            <h3 style="color: white; margin: 0;">{emoji} Score: {risco_calc}</h3>
         </div>
     """, unsafe_allow_html=True)
-    
     st.text_area(f"Motivo:", key=f"motivo_{i}")
     st.markdown("---")
 
-# --- BOTÕES ---
-col_btn1, col_btn2 = st.columns(2)
-with col_btn1:
-    if st.button("➕ Adicionar Risco", use_container_width=True):
-        st.session_state['riscos'].append({})
-        st.rerun()
-
-with col_btn2:
-    if st.button("💾 Salvar Todos os Dados", type="primary", use_container_width=True):
-        campos_fixos = ["input_processo", "input_objetivo", "input_executor", "input_descricao", "input_etapa_ini", "input_etapa_fim", "input_produto"]
-        erro_encontrado = False
-        for campo in campos_fixos:
-            if not st.session_state.get(campo):
-                st.session_state['errors'][campo] = "Campo obrigatório."
-                erro_encontrado = True
-        
-        if not erro_encontrado:
-            if salvar_no_excel(arquivo_excel):
-                st.session_state['errors'] = {}
-                st.session_state['deve_limpar'] = True
-                st.rerun()
+# --- BOTÃO SALVAR ---
+if st.button("💾 Salvar Todos os Dados", type="primary", use_container_width=True):
+    campos_fixos = ["input_processo", "input_objetivo", "input_executor", "input_descricao", "input_etapa_ini", "input_etapa_fim", "input_produto"]
+    
+    if all(st.session_state.get(c) for c in campos_fixos):
+        if salvar_no_banco():
+            st.success("Dados salvos com sucesso no SQL!")
+            st.session_state['deve_limpar'] = True
+            st.rerun()
+    else:
+        st.error("Por favor, preencha todos os campos obrigatórios.")
