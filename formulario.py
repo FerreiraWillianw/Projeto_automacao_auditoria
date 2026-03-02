@@ -57,22 +57,22 @@ if 'deve_limpar' in st.session_state and st.session_state['deve_limpar']:
      #   contagem = resultado.scalar() or 0
     #return f"{prefixo}.{contagem + 1}"
 def obter_proximo_codigo(area_selecionada):
-    # 1. Busca o prefixo no mapa
     prefixo = MAPPING_AREAS.get(area_selecionada)
     
-    if prefixo is None:
-        st.error(f"Erro: Área '{area_selecionada}' não encontrada no MAPPING_AREAS.")
-        return "0.0"
-
-    # 2. Query de contagem filtrando exatamente pela área selecionada
+    # query de contagem
     query = text("SELECT COUNT(*) FROM processos WHERE area = :area")
     
     with engine.connect() as conn:
+        # AQUI O SEGREDO: O :area que você manda deve ser EXATAMENTE 
+        # o que está na coluna 'area' do seu banco de dados (o texto ou o número)
         resultado = conn.execute(query, {"area": area_selecionada})
         contagem = resultado.scalar() or 0
     
-    # DEBUG: Comente essas linhas quando tudo estiver funcionando
-    #st.sidebar.info(f"DEBUG: Área: {area_selecionada} | Prefixo: {prefixo} | Processos encontrados: {contagem}")
+    # DEBUG TOTAL - Olhe a barra lateral do seu app!
+    st.sidebar.subheader("🔍 Debug do Sistema")
+    st.sidebar.write(f"Área selecionada: {area_selecionada}")
+    st.sidebar.write(f"O banco de dados encontrou {contagem} processos para '{area_selecionada}'")
+    st.sidebar.write(f"Código sugerido: {prefixo}.{contagem + 1}")
     
     return f"{prefixo}.{contagem + 1}"
 
