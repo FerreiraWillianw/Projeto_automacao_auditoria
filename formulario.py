@@ -159,29 +159,29 @@ def verificar_nome_processo():
                 sugestao = obter_proximo_codigo(area_selecionada)
                 st.session_state['codigo_processo'] = sugestao
 
-def atualizar_codigo():
+def processar_codigo_inteligente():
     area = st.session_state.get("area")
     nome = st.session_state.get("input_processo")
 
-    # Se não tem área, limpa tudo
-    if not area:
+    # Se não temos área ou nome, não fazemos nada (campo fica vazio)
+    if not area or not nome:
         st.session_state['codigo_processo'] = ""
         return
 
-    # Tenta buscar se o processo já existe
+    # Tenta buscar no banco
     query = text("SELECT codigo_processo FROM processos WHERE area = :area AND nome_processo = :nome")
     with engine.connect() as conn:
         resultado = conn.execute(query, {"area": area, "nome": nome}).fetchone()
 
     if resultado:
-        # Achou: Trava o código existente
+        # Se existe, puxa o código que já está gravado
         st.session_state['codigo_processo'] = resultado[0]
-        st.toast(f"Processo já cadastrado! Código: {resultado[0]}", icon="🔍")
+        st.toast(f"Processo já existe! Código carregado: {resultado[0]}", icon="✅")
     else:
-        # Não achou: Gera o próximo código da sequência
-        # Chamamos a função que você já tinha pronta
+        # Se é novo, gera o próximo código
         st.session_state['codigo_processo'] = obter_proximo_codigo(area)
 
+# --- UI ---
 # --- UI ---
 st.set_page_config(page_title="Diagnóstico FUSVE", layout="centered")
 
@@ -196,23 +196,26 @@ if 'riscos' not in st.session_state: st.session_state['riscos'] = []
 if 'errors' not in st.session_state: st.session_state['errors'] = {}
 
 # 1. Dados do Processo ---------------------------------------
-
 st.subheader("1. Dados do Processo")
-area = st.selectbox("Selecione a Área:", list(MAPPING_AREAS.keys()), key="area", on_change=atualizar_codigo)
 
-if area:
-    sugestao_id = obter_proximo_codigo(area)
-    # FORÇAMOS o valor no session_state antes de renderizar o campo
-    st.session_state['codigo_processo'] = sugestao_id 
-    
-    # Agora o campo vai obedecer o que está no session_state
-    st.text_input("Código do Processo:", key="codigo_processo", disabled=True)
-else:
-    # Se não tem área, garantimos que o campo fique vazio
-    st.session_state['codigo_processo'] = ""
-    st.text_input("Código do Processo:", key="codigo_processo", disabled=True)
+# Selectbox da Área: Ao mudar, limpa o código (pois o contexto mudou)
+area = st.selectbox(
+    "Selecione a Área:", 
+    list(MAPPING_AREAS.keys()), 
+    key="area",
+    on_change=lambda: st.session_state.update({'codigo_processo': ''}) 
+)
 
-st.text_input("Nome do Processo:", key="input_processo", on_change=verificar_nome_processo)
+# Input Nome: Ao mudar, roda a validação inteligente
+nome = st.text_input(
+    "Nome do Processo:", 
+    key="input_processo", 
+    on_change=processar_codigo_inteligente
+)
+
+# Código: Apenas exibição (O valor é preenchido pelo session_state via on_change)
+st.text_input("Código do Processo:", key="codigo_processo", disabled=True)
+
 st.text_area("Objetivo:", key="input_objetivo")
 st.text_area("Quem Executa?", key="input_executor")
 st.text_area("Descrição:", key="input_descricao")
