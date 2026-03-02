@@ -157,9 +157,18 @@ if 'errors' not in st.session_state: st.session_state['errors'] = {}
 
 st.subheader("1. Dados do Processo")
 area = st.selectbox("Selecione a Área:", list(MAPPING_AREAS.keys()), key="area")
+
 if area:
     sugestao_id = obter_proximo_codigo(area)
-    st.text_input("Código do Processo:", value=sugestao_id, key="codigo_processo", disabled=True)
+    # FORÇAMOS o valor no session_state antes de renderizar o campo
+    st.session_state['codigo_processo'] = sugestao_id 
+    
+    # Agora o campo vai obedecer o que está no session_state
+    st.text_input("Código do Processo:", key="codigo_processo", disabled=True)
+else:
+    # Se não tem área, garantimos que o campo fique vazio
+    st.session_state['codigo_processo'] = ""
+    st.text_input("Código do Processo:", key="codigo_processo", disabled=True)
 
 st.text_input("Nome do Processo:", key="input_processo")
 st.text_area("Objetivo:", key="input_objetivo")
