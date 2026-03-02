@@ -1,0 +1,8 @@
+# Arquivos que o Git deve ignorar (NUNCA subir para o GitHub)
+.streamlit/secrets.toml
+__pycache__/
+*.xlsx
+*.db
+.DS_Store
+venv/
+.env
