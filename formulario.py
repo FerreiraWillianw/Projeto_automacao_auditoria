@@ -72,7 +72,7 @@ def obter_proximo_codigo(area_selecionada):
         contagem = resultado.scalar() or 0
     
     # DEBUG: Comente essas linhas quando tudo estiver funcionando
-    st.sidebar.info(f"DEBUG: Área: {area_selecionada} | Prefixo: {prefixo} | Processos encontrados: {contagem}")
+    #st.sidebar.info(f"DEBUG: Área: {area_selecionada} | Prefixo: {prefixo} | Processos encontrados: {contagem}")
     
     return f"{prefixo}.{contagem + 1}"
 
@@ -141,24 +141,21 @@ def salvar_no_banco():
         return False
 
 def verificar_nome_processo():
-    # Pega o que o usuário digitou e a área selecionada
     nome_digitado = st.session_state.get("input_processo")
     area_selecionada = st.session_state.get("area")
 
     if nome_digitado and area_selecionada:
-        query = text("""
-            SELECT codigo_processo FROM processos 
-            WHERE area = :area AND nome_processo = :nome
-        """)
+        # Busca o código no banco
+        query = text("SELECT codigo_processo FROM processos WHERE area = :area AND nome_processo = :nome")
         with engine.connect() as conn:
             resultado = conn.execute(query, {"area": area_selecionada, "nome": nome_digitado}).fetchone()
             
             if resultado:
-                # Se achou, atualiza o código do processo com o existente
+                # Se encontrou, atualiza o código existente
                 st.session_state['codigo_processo'] = resultado[0]
-                st.toast(f"Processo '{nome_digitado}' encontrado! Código: {resultado[0]}", icon="🔍")
+                st.toast(f"Processo '{nome_digitado}' encontrado! Código carregado: {resultado[0]}", icon="🔍")
             else:
-                # Se não achou, mantém o código que seria o próximo
+                # Se não encontrou, mantém a sugestão do próximo código
                 sugestao = obter_proximo_codigo(area_selecionada)
                 st.session_state['codigo_processo'] = sugestao
 
