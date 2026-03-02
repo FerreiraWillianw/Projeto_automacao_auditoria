@@ -159,6 +159,29 @@ def verificar_nome_processo():
                 sugestao = obter_proximo_codigo(area_selecionada)
                 st.session_state['codigo_processo'] = sugestao
 
+def atualizar_codigo():
+    area = st.session_state.get("area")
+    nome = st.session_state.get("input_processo")
+
+    # Se não tem área, limpa tudo
+    if not area:
+        st.session_state['codigo_processo'] = ""
+        return
+
+    # Tenta buscar se o processo já existe
+    query = text("SELECT codigo_processo FROM processos WHERE area = :area AND nome_processo = :nome")
+    with engine.connect() as conn:
+        resultado = conn.execute(query, {"area": area, "nome": nome}).fetchone()
+
+    if resultado:
+        # Achou: Trava o código existente
+        st.session_state['codigo_processo'] = resultado[0]
+        st.toast(f"Processo já cadastrado! Código: {resultado[0]}", icon="🔍")
+    else:
+        # Não achou: Gera o próximo código da sequência
+        # Chamamos a função que você já tinha pronta
+        st.session_state['codigo_processo'] = obter_proximo_codigo(area)
+
 # --- UI ---
 st.set_page_config(page_title="Diagnóstico FUSVE", layout="centered")
 
@@ -175,7 +198,7 @@ if 'errors' not in st.session_state: st.session_state['errors'] = {}
 # 1. Dados do Processo ---------------------------------------
 
 st.subheader("1. Dados do Processo")
-area = st.selectbox("Selecione a Área:", list(MAPPING_AREAS.keys()), key="area")
+area = st.selectbox("Selecione a Área:", list(MAPPING_AREAS.keys()), key="area", on_change=atualizar_codigo)
 
 if area:
     sugestao_id = obter_proximo_codigo(area)
