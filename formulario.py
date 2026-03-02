@@ -27,7 +27,7 @@ MAPA_RISCO = {
 
 # --- LÓGICA DE LIMPEZA ---
 if 'deve_limpar' in st.session_state and st.session_state['deve_limpar']:
-    
+
     # 1. Reseta os campos de texto
     campos_para_limpar = ["input_processo", "input_objetivo", "input_executor", 
                           "input_descricao", "input_etapa_ini", "input_etapa_fim", 
@@ -66,26 +66,41 @@ def get_estilo_risco(score):
 def salvar_no_banco():
     try: 
         with engine.begin() as conn:
-            # 1. Salva Processo
-            sql_processo = text("""
-                INSERT INTO processos (area, codigo_processo, nome_processo, objetivo, executor, descricao, etapa_ini, etapa_fim, produto)
-                VALUES (:area, :cod, :nome, :obj, :exec, :desc, :e_ini, :e_fim, :prod)
-                RETURNING id
-            """)
-            resultado = conn.execute(sql_processo, {
-                "area": st.session_state.get("area"),
-                "cod": st.session_state.get("codigo_processo"),
-                "nome": st.session_state.get("input_processo"),
-                "obj": st.session_state.get("input_objetivo"),
-                "exec": st.session_state.get("input_executor"),
-                "desc": st.session_state.get("input_descricao"),
-                "e_ini": st.session_state.get("input_etapa_ini"),
-                "e_fim": st.session_state.get("input_etapa_fim"),
-                "prod": st.session_state.get("input_produto")
-            })
-            processo_id = resultado.scalar()
+            area_val = st.session_state.get("area")
+            nome_val = st.session_state.get("input_processo")
 
-            # 2. Salva Riscos
+           # Tenta encontrar o processo existente
+            query_busca = text("SELECT id FROM processos WHERE area = :area AND nome_processo = :nome")
+            resultado_query = conn.execute(query_busca, {"area": area_val, "nome": nome_val})
+            
+            # Aqui está a correção: usamos o .fetchone()
+            processo_existente = resultado_query.fetchone()
+
+            if processo_existente:
+                # Se encontrou, processo_existente[0] é o ID
+                processo_id = processo_existente[0]
+                st.info(f"Processo já existe no banco (ID: {processo_id}). Adicionando riscos ao processo atual...")
+            else:
+                # Se não encontrou, criamos um novo processo
+                sql_processo = text("""
+                    INSERT INTO processos (area, codigo_processo, nome_processo, objetivo, executor, descricao, etapa_ini, etapa_fim, produto)
+                    VALUES (:area, :cod, :nome, :obj, :exec, :desc, :e_ini, :e_fim, :prod)
+                    RETURNING id
+                """)
+                resultado_insert = conn.execute(sql_processo, {
+                    "area": area_val,
+                    "cod": st.session_state.get("codigo_processo"),
+                    "nome": nome_val,
+                    "obj": st.session_state.get("input_objetivo"),
+                    "exec": st.session_state.get("input_executor"),
+                    "desc": st.session_state.get("input_descricao"),
+                    "e_ini": st.session_state.get("input_etapa_ini"),
+                    "e_fim": st.session_state.get("input_etapa_fim"),
+                    "prod": st.session_state.get("input_produto")
+                })
+                processo_id = resultado_insert.scalar()
+
+            # Salva Riscos
             sql_risco = text("""
                 INSERT INTO riscos (processo_id, nome_risco, fator_risco, melhoria, impacto, probabilidade, apetite_risco, motivo_risco)
                 VALUES (:pid, :nome, :fator, :melhoria, :imp, :prob, :apetite, :motivo)
