@@ -27,20 +27,25 @@ MAPA_RISCO = {
 
 # --- LÓGICA DE LIMPEZA ---
 if 'deve_limpar' in st.session_state and st.session_state['deve_limpar']:
+    
     # 1. Reseta os campos de texto
     campos_para_limpar = ["input_processo", "input_objetivo", "input_executor", 
                           "input_descricao", "input_etapa_ini", "input_etapa_fim", 
                           "input_produto", "codigo_processo"]
+    
     for campo in campos_para_limpar:
         if campo in st.session_state:
             st.session_state[campo] = ""
+
     # 2. Reseta a Selectbox da área
     st.session_state["area"] = None
+
     # 3. Reseta os riscos
     st.session_state['riscos'] = []
+
     # Finaliza a flag
     st.session_state['deve_limpar'] = False
-    
+
     st.rerun()
 
 # --- FUNÇÕES ---
