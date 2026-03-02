@@ -140,6 +140,28 @@ def salvar_no_banco():
         st.error(f"Erro ao salvar no banco: {e}")
         return False
 
+def verificar_nome_processo():
+    # Pega o que o usuário digitou e a área selecionada
+    nome_digitado = st.session_state.get("input_processo")
+    area_selecionada = st.session_state.get("area")
+
+    if nome_digitado and area_selecionada:
+        query = text("""
+            SELECT codigo_processo FROM processos 
+            WHERE area = :area AND nome_processo = :nome
+        """)
+        with engine.connect() as conn:
+            resultado = conn.execute(query, {"area": area_selecionada, "nome": nome_digitado}).fetchone()
+            
+            if resultado:
+                # Se achou, atualiza o código do processo com o existente
+                st.session_state['codigo_processo'] = resultado[0]
+                st.toast(f"Processo '{nome_digitado}' encontrado! Código: {resultado[0]}", icon="🔍")
+            else:
+                # Se não achou, mantém o código que seria o próximo
+                sugestao = obter_proximo_codigo(area_selecionada)
+                st.session_state['codigo_processo'] = sugestao
+
 # --- UI ---
 st.set_page_config(page_title="Diagnóstico FUSVE", layout="centered")
 
@@ -170,7 +192,7 @@ else:
     st.session_state['codigo_processo'] = ""
     st.text_input("Código do Processo:", key="codigo_processo", disabled=True)
 
-st.text_input("Nome do Processo:", key="input_processo")
+st.text_input("Nome do Processo:", key="input_processo", on_change=verificar_nome_processo)
 st.text_area("Objetivo:", key="input_objetivo")
 st.text_area("Quem Executa?", key="input_executor")
 st.text_area("Descrição:", key="input_descricao")
